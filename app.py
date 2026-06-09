@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 import os
+import streamlit.components.v1 as components
 
 # App Page Configurations
 st.set_page_config(page_title="Store Scan & Print", page_icon="📦", layout="centered")
@@ -21,7 +22,6 @@ def load_data_from_github():
             df_stock.columns = [c.strip().lower() for c in df_stock.columns]
             
             if 'item code' in df_ean.columns and 'eancode' in df_ean.columns and 'item code' in df_stock.columns:
-                # FIXED: Corrected pandas string methods formatting
                 df_ean['item code'] = df_ean['item code'].astype(str).str.strip()
                 df_ean['eancode'] = df_ean['eancode'].astype(str).str.strip()
                 df_stock['item code'] = df_stock['item code'].astype(str).str.strip()
@@ -52,7 +52,6 @@ else:
 
 selected_store = st.sidebar.selectbox("Apna Store Chunein:", unique_stores)
 
-# Filter based on store
 if 'outlet name' in inventory_data.columns:
     filtered_df = inventory_data[inventory_data['outlet name'] == selected_store]
 else:
@@ -60,32 +59,58 @@ else:
 
 st.sidebar.success(f"Connected to: {selected_store} ({len(filtered_df)} Items)")
 
-# 3. BUTTON-CONTROLLED CAMERA (Camera stays OFF until clicked)
-st.subheader("📷 Barcode Scanner")
+# 3. REAL LIVE BARCODE AUTO-SCANNER (Html5-Qrcode Embedded)
+st.subheader("📷 Live Barcode Auto-Scanner")
 
-if 'camera_on' not in st.session_state:
-    st.session_state.camera_on = False
+# Session State to handle scanned value from Javascript component
+if 'js_scanned_code' not in st.session_state:
+    st.session_state.js_scanned_code = ""
 
-# Toggle Buttons for Camera
-if not st.session_state.camera_on:
-    if st.button("📷 Open Camera Scanner", type="primary"):
-        st.session_state.camera_on = True
-        st.rerun()
-else:
-    if st.button("❌ Close Camera Scanner", type="secondary"):
-        st.session_state.camera_on = False
-        st.rerun()
-    
-    captured_image = st.camera_input("Barcode ke samne photo kheenchein")
-    if captured_image:
-        st.info("💡 Tip: Photo khinchne ke baad niche box me code enter karein ya automatic entry check karein.")
+# Injecting HTML5-QRCode Scanner Library directly into Streamlit UI
+scanner_html = """
+<div style="width: 100%; max-width: 500px; margin: auto; text-align: center; font-family: sans-serif;">
+    <div id="reader" style="width: 100%; border-radius: 10px; overflow: hidden; background: #f0f2f6;"></div>
+    <div id="result" style="margin-top: 10px; font-weight: bold; color: #2ecc71;"></div>
+</div>
 
-# Manual Input Box
-scanned_input = st.text_input("Yahan Barcode (Eancode) ya Item Code enter karein:", key="barcode_input")
+<script src="https://unpkg.com" type="text/javascript"></script>
+<script>
+    function onScanSuccess(decodedText, decodedResult) {
+        document.getElementById('result').innerText = "Scanned: " + decodedText;
+        // Sending data back to Streamlit app backend safely
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: decodedText
+        }, '*');
+        html5QrcodeScanner.clear();
+    }
+
+    function onScanFailure(error) {
+        // Silent error logs to avoid retail UI clutter
+    }
+
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", 
+        { fps: 10, qrbox: {width: 250, height: 150}, rememberLastUsedCamera: true },
+        /* verbose= */ false
+    );
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+</script>
+"""
+
+# Render JavaScript Scanner Component inside custom iframe
+with st.container():
+    components.html(scanner_html, height=380, scrolling=False)
+
+# Manual Backup and Fast Gun Entry Box
+manual_input = st.text_input("Yahan Barcode scan karein ya enter karein:", key="barcode_input")
+
+# Final lookup key assignment
+scanned_input = manual_input.strip() if manual_input else st.session_state.js_scanned_code
 
 # 4. LOOKUP & DUAL RATE VERIFICATION
 if scanned_input:
-    search_value = scanned_input.strip()
+    search_value = str(scanned_input).strip()
     product_rows = filtered_df[(filtered_df['eancode'] == search_value) | (filtered_df['item code'] == search_value)]
     
     if not product_rows.empty:
