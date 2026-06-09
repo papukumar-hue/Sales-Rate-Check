@@ -9,9 +9,11 @@ st.title("📦 Store Scan & POP Print App")
 st.write("GitHub se live Excel data automatic read ho raha hai.")
 
 # 1. DATABASE MANAGEMENT (Automatic GitHub Fetch)
-@st.cache_data(ttl=60) # Har 1 minute me data refresh hoga agar GitHub par badla to
+@st.cache_data(ttl=60) # Har 1 minute me data automatic refresh hoga
 def load_data_from_github():
-    file_path = "data.xlsx" # GitHub par isi naam se file honi chahiye
+    # GitHub par aapki file ka naam 'Data.xlsx' hai (Capital D)
+    file_path = "Data.xlsx" 
+    
     if os.path.exists(file_path):
         try:
             # 1. Read EAN Sheet
@@ -22,19 +24,25 @@ def load_data_from_github():
             df_stock = pd.read_excel(file_path, sheet_name="Stock And Rate")
             df_stock.columns = [c.strip().lower() for c in df_stock.columns]
             
-            # Data Cleaning
-            df_ean['item code'] = df_ean['item code'].astype(str).str.split('.').str[0].str.strip()
-            df_ean['eancode'] = df_ean['eancode'].astype(str).str.split('.').str[0].str.strip()
-            df_stock['item code'] = df_stock['item code'].astype(str).str.split('.').str[0].str.strip()
-            
-            # Merge both sheets
-            df_final = pd.merge(df_stock, df_ean[['item code', 'eancode']], on='item code', how='left')
-            return df_final
+            # Column Names Validation according to your excel structure
+            if 'item code' in df_ean.columns and 'eancode' in df_ean.columns and 'item code' in df_stock.columns:
+                
+                # Data Cleaning (Remove spaces and convert to string)
+                df_ean['item code'] = df_ean['item code'].astype(str).str.split('.').str[0].str.strip()
+                df_ean['eancode'] = df_ean['eancode'].astype(str).str.split('.').str[0].str.strip()
+                df_stock['item code'] = df_stock['item code'].astype(str).str.split('.').str[0].str.strip()
+                
+                # Merge both sheets using 'item code' as common link
+                df_final = pd.merge(df_stock, df_ean[['item code', 'eancode']], on='item code', how='left')
+                return df_final
+            else:
+                st.error("❌ Sheet ke andar columns galat hain! 'EAN' sheet me (Item Code, Eancode) aur 'Stock And Rate' sheet me (Item Code, Item Name, Selling, MRP, Current Stk.) hona chahiye.")
+                return None
         except Exception as e:
             st.error(f"❌ Excel sheets read karne me galti hui: {e}")
             return None
     else:
-        st.error("❌ Repository me 'data.xlsx' file nahi mili! Kripya sahi naam se upload karein.")
+        st.error(f"❌ Repository me '{file_path}' file nahi mili! Kripya check karein ki GitHub par naam sahi hai ya nahi.")
         return None
 
 # Auto Load Data
@@ -43,13 +51,16 @@ inventory_data = load_data_from_github()
 if inventory_data is None:
     st.stop()
 else:
-    st.success(f"✅ Data Loaded from GitHub! Total Items: {len(inventory_data)}")
+    st.success(f"✅ Data Loaded Successfully! Total Items: {len(inventory_data)}")
 
-# 2. SCANNING SECTION
+# 2. SCANNING SECTION (Using Streamlit's official built-in camera)
 st.subheader("📷 Scan/Capture Product Barcode")
 image = st.camera_input("Take a picture of the barcode")
 
-# Manual Input Box (Accepts both Barcode/Eancode OR Item Code)
+if image:
+    st.info("💡 Tip: Agar photo se automatic code na aaye, toh niche box me barcode number ya item code daal kar enter karein.")
+
+# Manual / Fast Barcode Scanner Input Box (Accepts both Barcode/Eancode OR Item Code)
 scanned_input = st.text_input("Yahan Barcode (Eancode) scan karein ya Item Code enter karein:", key="barcode_input")
 
 # 3. LOOKUP & VERIFICATION SECTION
@@ -61,7 +72,7 @@ if scanned_input:
     product_row = df[(df['eancode'] == search_value) | (df['item code'] == search_value)]
     
     if not product_row.empty:
-        # Fetching data
+        # Fetching data from merged database
         item_name = str(product_row['item name'].values[0]).title()
         selling_rate = float(product_row['selling'].values[0])
         mrp_rate = float(product_row['mrp'].values[0]) if 'mrp' in df.columns else selling_rate
@@ -84,29 +95,34 @@ if scanned_input:
         new_rate = st.number_input("Agar shelf par rate galat hai, toh naya rate enter karein:", value=selling_rate, step=1.0)
         
         if st.button("Generate POP PDF", type="primary"):
+            # PDF Creation logic (3x2 inch format for thermal label printers)
             pdf = FPDF(orientation="L", unit="in", format=(3.0, 2.0))
             pdf.add_page()
             pdf.set_margins(0.1, 0.1, 0.1)
+            
+            # Label Outer Border
             pdf.rect(0.05, 0.05, 2.9, 1.9)
             
-            # Item Name
+            # Print Item Name
             pdf.set_font("Helvetica", style="B", size=11)
             pdf.cell(0, 0.3, txt=item_name[:28], ln=1, align="C")
             pdf.ln(0.05)
             
-            # Big Bold Price
+            # Print New Big Bold Price
             pdf.set_font("Helvetica", style="B", size=30)
-            pdf.set_text_color(231, 76, 60)
+            pdf.set_text_color(231, 76, 60) # Red Price
             pdf.cell(0, 0.5, txt=f"Rs. {int(new_rate)}/-", ln=1, align="C")
-            pdf.set_text_color(0, 0, 0)
+            pdf.set_text_color(0, 0, 0) # Reset to black
             
-            # Bottom Details
+            # Print Subtext / Barcode label below
             pdf.set_font("Helvetica", size=8)
             pdf.cell(0, 0.2, txt=f"Item Code: {item_code_val}", ln=1, align="C")
             pdf.cell(0, 0.2, txt=f"MRP: Rs.{int(mrp_rate)} (Save Rs.{int(mrp_rate - new_rate)})", ln=1, align="C")
                 
+            # Output PDF data as bytes
             pdf_bytes = pdf.output()
             
+            # Streamlit Download Button for PDF
             st.download_button(
                 label="📥 Download & Print Label",
                 data=bytes(pdf_bytes),
@@ -116,4 +132,4 @@ if scanned_input:
             st.balloons()
             st.info("PDF download karke apne thermal printer se sticker nikal lein.")
     else:
-        st.error(f"❌ '{search_value}' database me nahi mila!")
+        st.error(f"❌ '{search_value}' database me nahi mila! Kripya sahi Barcode ya Item Code enter karein.")
