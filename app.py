@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-from streamlit_qrcode_scanner import qrcode_scanner
 import os
 
 # App Page Configurations
@@ -10,7 +9,7 @@ st.title("📦 Store Scan & POP Print App")
 st.write("GitHub se live Excel data read ho raha hai.")
 
 # 1. DATABASE MANAGEMENT (Automatic GitHub Fetch)
-@st.cache_data(ttl=10) # Live updates ke liye data cache limits
+@st.cache_data(ttl=10)
 def load_data_from_github():
     file_path = "Data.xlsx" 
     if os.path.exists(file_path):
@@ -60,37 +59,29 @@ else:
 
 st.sidebar.success(f"Connected to: {selected_store} ({len(filtered_df)} Items)")
 
-# 3. ADVANCED TOGGLE SCAN BUTTON (Camera stays OFF until clicked)
+# 3. BUTTON-CONTROLLED CAMERA (Camera stays OFF until clicked)
 st.subheader("📷 Barcode Scanner")
 
-# State management to handle toggle opening and closing
-if 'show_scanner' not in st.session_state:
-    st.session_state.show_scanner = False
+if 'camera_on' not in st.session_state:
+    st.session_state.camera_on = False
 
-col1, col2 = st.columns([1, 2])
-with col1:
-    if st.button("📷 Open Camera Scanner", type="secondary"):
-        st.session_state.show_scanner = True
-
-scanned_input = None
-
-# If user clicked open camera, display interactive live web-scanner
-if st.session_state.show_scanner:
-    with st.status("Scanning Active... Point at Barcode", expanded=True):
-        # Professional Javascript engine wrapper component
-        captured_code = qrcode_scanner(key="retail_barcode_scanner")
-        if captured_code:
-            scanned_input = str(captured_code).strip()
-            st.session_state.show_scanner = False # Turn off camera immediately after successful scan
-            st.rerun()
-    if st.button("❌ Close Camera"):
-        st.session_state.show_scanner = False
+# Toggle Buttons for Camera
+if not st.session_state.camera_on:
+    if st.button("📷 Open Camera Scanner", type="primary"):
+        st.session_state.camera_on = True
         st.rerun()
+else:
+    if st.button("❌ Close Camera Scanner", type="secondary"):
+        st.session_state.camera_on = False
+        st.rerun()
+    
+    # Official Camera is embedded inside this condition, so it shuts down completely when turned off
+    captured_image = st.camera_input("Barcode ke samne photo kheenchein")
+    if captured_image:
+        st.info("💡 Tip: Photo khinchne ke baad niche box me code enter karein ya automatic entry check karein.")
 
-# Manual Input Backup box
-manual_input = st.text_input("Yahan Barcode (Eancode) ya Item Code enter karein:", key="barcode_input")
-if manual_input:
-    scanned_input = manual_input.strip()
+# Manual Input Box
+scanned_input = st.text_input("Yahan Barcode (Eancode) ya Item Code enter karein:", key="barcode_input")
 
 # 4. LOOKUP & DUAL RATE VERIFICATION
 if scanned_input:
@@ -100,7 +91,6 @@ if scanned_input:
     if not product_rows.empty:
         st.subheader("📋 Product Details Found")
         
-        # Loop for handling multiple rates of same barcode seamlessly
         for index, row in product_rows.iterrows():
             item_name = str(row['item name']).title()
             selling_rate = float(row['selling'])
@@ -108,7 +98,6 @@ if scanned_input:
             current_stock = row['current stk.']
             item_code_val = row['item code']
             
-            # Card UI
             st.markdown(f"""
             <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; border-left: 5px solid #2ecc71; margin-bottom: 15px;">
                 <h4 style="margin:0; color:#31333f;">📦 {item_name} (Code: {item_code_val})</h4>
@@ -117,7 +106,6 @@ if scanned_input:
             </div>
             """, unsafe_allow_html=True)
             
-            # Print logic tag
             with st.expander(f"🖨️ Print Label for Rate ₹{selling_rate}"):
                 new_rate = st.number_input("Naya price enter karein:", value=selling_rate, step=1.0, key=f"input_{index}")
                 

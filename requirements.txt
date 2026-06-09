@@ -1,4 +1,3 @@
 pandas
 openpyxl
 fpdf2
-streamlit-qrcode-scanner==1.2.2
