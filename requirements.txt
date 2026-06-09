@@ -1,4 +1,3 @@
 pandas
 openpyxl
 fpdf2
-streamlit-camera-input-live

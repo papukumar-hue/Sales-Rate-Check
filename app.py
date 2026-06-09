@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
-from PIL import Image
 from fpdf import FPDF
-from streamlit_camera_input_live import camera_input_live
-import io
 
 # App Page Configurations
 st.set_page_config(page_title="Store Scan & Print", page_icon="📦", layout="centered")
@@ -43,24 +40,19 @@ if st.session_state.inventory_data is None:
     st.info("⚠️ Kripya pehle sidebar me subah ki Excel file upload karein.")
     st.stop()
 
-# 2. SCANNING SECTION
-st.subheader("📷 Scan Product Barcode")
-image = camera_input_live(debounce=1000)
+# 2. SCANNING SECTION (Using Streamlit's official built-in camera)
+st.subheader("📷 Scan/Capture Product Barcode")
+image = st.camera_input("Take a picture of the barcode")
 
-scanned_barcode = None
-
-# Streamlit-camera-input-live automatic component data handle karega backend me
 if image:
-    st.image(image, caption="Captured Image", width=200)
-    st.info("💡 Note: Agar auto-scan nahi hota, toh niche manual barcode daal kar check karein.")
+    st.info("💡 Tip: Agar photo se auto-scan software setup nahi hai, toh photo khinchne ke baad niche box me barcode number enter karein.")
 
-# Manual Input & Fast Scanner Input Backup
-manual_barcode = st.text_input("Yahan Barcode scan karein ya enter karein:", key="barcode_input")
-if manual_barcode:
-    scanned_barcode = manual_barcode.strip()
+# Manual / Fast Scanner Input Box (Crucial for retail speed)
+scanned_barcode = st.text_input("Yahan Barcode scan karein ya enter karein:", key="barcode_input")
 
 # 3. LOOKUP & VERIFICATION SECTION
 if scanned_barcode:
+    scanned_barcode = scanned_barcode.strip()
     df = st.session_state.inventory_data
     # Search barcode in dataframe
     product_row = df[df['barcode'] == str(scanned_barcode)]
