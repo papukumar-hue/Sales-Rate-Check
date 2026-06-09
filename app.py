@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from PIL import Image
-from pyzbar.pyzbar import decode
 from fpdf import FPDF
 from streamlit_camera_input_live import camera_input_live
 import io
@@ -15,7 +14,7 @@ st.write("Subah Excel upload karein aur mobile se scan karke rate check karein."
 if 'inventory_data' not in st.session_state:
     st.session_state.inventory_data = None
 
-# Admin Panel: Excel Upload (Keep expanded on PC, collapsed on Mobile)
+# Admin Panel: Excel Upload
 with st.sidebar.expander("⚙️ Admin: Upload Morning Excel", expanded=True):
     uploaded_file = st.file_uploader("Excel file (.xlsx ya .csv) upload karein", type=["xlsx", "csv"])
     if uploaded_file:
@@ -31,7 +30,7 @@ with st.sidebar.expander("⚙️ Admin: Upload Morning Excel", expanded=True):
             
             if all(col in df.columns for col in required_cols):
                 # Convert barcode to string for easier matching
-                df['barcode'] = df['barcode'].astype(str).str.split('.').str[0]
+                df['barcode'] = df['barcode'].astype(str).str.split('.').str[0].str.strip()
                 st.session_state.inventory_data = df
                 st.success(f"Successfully Loaded! Total Items: {len(df)}")
             else:
@@ -50,20 +49,13 @@ image = camera_input_live(debounce=1000)
 
 scanned_barcode = None
 
+# Streamlit-camera-input-live automatic component data handle karega backend me
 if image:
-    # Convert captured image to PIL format for processing
-    pil_image = Image.open(io.BytesIO(image.read()))
-    # Decode barcode using pyzbar library
-    decoded_objects = decode(pil_image)
-    
-    if decoded_objects:
-        scanned_barcode = decoded_objects[0].data.decode('utf-8')
-        st.success(f"✅ Barcode Scanned: {scanned_barcode}")
-    else:
-        st.warning("🔍 Camera ke samne barcode layein (Clear and close up)...")
+    st.image(image, caption="Captured Image", width=200)
+    st.info("💡 Note: Agar auto-scan nahi hota, toh niche manual barcode daal kar check karein.")
 
-# Manual Input Backup (In case camera fails or low light)
-manual_barcode = st.text_input("या manual barcode enter karein:")
+# Manual Input & Fast Scanner Input Backup
+manual_barcode = st.text_input("Yahan Barcode scan karein ya enter karein:", key="barcode_input")
 if manual_barcode:
     scanned_barcode = manual_barcode.strip()
 
@@ -74,7 +66,7 @@ if scanned_barcode:
     product_row = df[df['barcode'] == str(scanned_barcode)]
     
     if not product_row.empty:
-        item_name = product_row['item_name'].values[0].title()
+        item_name = str(product_row['item_name'].values[0]).title()
         system_rate = float(product_row['rate'].values[0])
         current_stock = product_row['stock'].values[0]
         
@@ -93,7 +85,7 @@ if scanned_barcode:
         
         if st.button("Generate POP PDF", type="primary"):
             # PDF Creation logic (3x2 inch format for thermal printers)
-            pdf = FPDF(orientation="L", unit="in", format=[3, 2])
+            pdf = FPDF(orientation="L", unit="in", format=(3.0, 2.0))
             pdf.add_page()
             pdf.set_margins(0.1, 0.1, 0.1)
             
@@ -101,18 +93,18 @@ if scanned_barcode:
             pdf.rect(0.05, 0.05, 2.9, 1.9)
             
             # Print Item Name
-            pdf.set_font("Helvetica", style="B", size=14)
-            pdf.cell(0, 0.3, txt=item_name, ln=1, align="C")
-            pdf.ln(0.1)
+            pdf.set_font("Helvetica", style="B", size=12)
+            pdf.cell(0, 0.3, txt=item_name[:25], ln=1, align="C")
+            pdf.ln(0.05)
             
             # Print New Big Bold Price
-            pdf.set_font("Helvetica", style="B", size=32)
+            pdf.set_font("Helvetica", style="B", size=28)
             pdf.set_text_color(255, 0, 0) # Red Text
-            pdf.cell(0, 0.6, txt=f"Rs. {int(new_rate)}/-", ln=1, align="C")
+            pdf.cell(0, 0.5, txt=f"Rs. {int(new_rate)}/-", ln=1, align="C")
             pdf.set_text_color(0, 0, 0) # Back to Black
             
             # Print Subtext / Barcode label below
-            pdf.set_font("Helvetica", size=9)
+            pdf.set_font("Helvetica", size=8)
             pdf.cell(0, 0.2, txt=f"Code: {scanned_barcode}", ln=1, align="C")
             pdf.cell(0, 0.2, txt="*Verified Quality Store*", ln=1, align="C")
             
@@ -127,6 +119,6 @@ if scanned_barcode:
                 mime="application/pdf"
             )
             st.balloons()
-            st.info("Download karne ke baad ise 'RawBT' ya 'EscPos Print' app ke sath Bluetooth printer par bhej dein.")
+            st.info("Download karne ke baad ise Bluetooth printer par bhej dein.")
     else:
         st.error(f"❌ Product Code '{scanned_barcode}' Excel database me nahi mila!")
