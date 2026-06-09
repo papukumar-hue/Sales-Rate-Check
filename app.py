@@ -21,9 +21,10 @@ def load_data_from_github():
             df_stock.columns = [c.strip().lower() for c in df_stock.columns]
             
             if 'item code' in df_ean.columns and 'eancode' in df_ean.columns and 'item code' in df_stock.columns:
-                df_ean['item code'] = df_ean['item code'].astype(str).str.split('.').str.str.strip()
-                df_ean['eancode'] = df_ean['eancode'].astype(str).str.split('.').str.str.strip()
-                df_stock['item code'] = df_stock['item code'].astype(str).str.split('.').str.str.strip()
+                # FIXED: Corrected pandas string methods formatting
+                df_ean['item code'] = df_ean['item code'].astype(str).str.strip()
+                df_ean['eancode'] = df_ean['eancode'].astype(str).str.strip()
+                df_stock['item code'] = df_stock['item code'].astype(str).str.strip()
                 
                 df_final = pd.merge(df_stock, df_ean[['item code', 'eancode']], on='item code', how='left')
                 return df_final
@@ -75,7 +76,6 @@ else:
         st.session_state.camera_on = False
         st.rerun()
     
-    # Official Camera is embedded inside this condition, so it shuts down completely when turned off
     captured_image = st.camera_input("Barcode ke samne photo kheenchein")
     if captured_image:
         st.info("💡 Tip: Photo khinchne ke baad niche box me code enter karein ya automatic entry check karein.")
